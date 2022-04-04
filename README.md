@@ -36,6 +36,11 @@ Run setup script once for wrk
 ```bash
 $ sudo bash client/setup.sh
 ```
+You will need some python libraries as well. You can do this manually
+or use conda:
+```bash
+$ conda env create --name envname --file=client/environments.yml
+```
 
 ### Testing server with wrk on client
 To test sample wrk workloads from client and save stats to results/:
