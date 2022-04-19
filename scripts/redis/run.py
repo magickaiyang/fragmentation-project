@@ -45,6 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('--p', type=str, required=False, help='page size')
     args = parser.parse_args()
 
+    os.system("redis-server")
     for i in range(args.n):
         cmd = "redis-benchmark >> benchmark-result_" + str(i) + ".log"
         out = execute(cpu_list=args.c, page_size=args.p, num_iter=args.n, benchmark="redis", cmd=cmd)
