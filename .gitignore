@@ -1,2 +1,5 @@
 *.rdb
 *.out
+.idea/
+.DS_Store
+benchbase/*
