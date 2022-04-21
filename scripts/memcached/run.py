@@ -3,129 +3,142 @@
 """
 python3 run.py -n $NUM_ITER -c $CPU_LIST -p $PAGE_SIZE
 """
+import argparse
 import csv
 import glob
 import json
 import os
-import sys
-import argparse
-import subprocess
-import json
-import glob
-import re
+from dataclasses import dataclass
 
 MEMCACHED_HEADERS = [
     "ops_per_sec",
     "hits_per_sec",
     "misses_per_sec",
     "avg_latency",
+    "min_latency",
+    "max_latency",
     "p50_latency",
     "p99_latency",
     "p999_Latency",
     "kb_per_sec",
 ]
 
-result_dir = "./result"
+
+@dataclass
+class Config:
+    cpu_list: str = '0-7'
+    page_size: str = '4k'
+    num_iter: int = 1
+    num_req: int = 10000
+    num_thread: int = 1
+    benchmark: str = 'redis'
+
+    def to_string(self):
+        return "{}_{}_{}_{}_{}_{}" \
+            .format(self.cpu_list, self.page_size, self.num_iter, self.num_req, self.num_thread, self.benchmark)
 
 
-class MemcachedResult:
-    dict = {"ops_per_sec": "",
-            "hits_per_sec": "",
-            "misses_per_sec": "",
-            "avg_latency": "",
-            "p50_latency": "",
-            "p99_latency": "",
-            "p999_Latency": "",
-            "kb_per_sec": ""
-            }
-
-    ops_per_sec, \
-    hits_per_sec, misses_per_sec, avg_latency, \
-    p50_latency, p99_latency, p999_Latency, kb_per_sec = "", "", "", "", "", "", "", ""
-
-    def __init__(self, ops_per_sec,
-                 hits_per_sec, misses_per_sec, avg_latency,
-                 p50_latency, p99_latency, p999_Latency, kb_per_sec):
-        self.dict = {"ops_per_sec": ops_per_sec,
-                     "hits_per_sec": hits_per_sec,
-                     "misses_per_sec": misses_per_sec,
-                     "avg_latency": avg_latency,
-                     "p50_latency": p50_latency,
-                     "p99_latency": p99_latency,
-                     "p999_Latency": p999_Latency,
-                     "kb_per_sec": kb_per_sec
-                     }
-
-        self.ops_per_sec, \
-        self.hits_per_sec, self.misses_per_sec, self.avg_latency, \
-        self.p50_latency, self.p99_latency, self.p999_Latency, self.kb_per_sec \
-            = ops_per_sec, hits_per_sec, misses_per_sec, avg_latency, \
-              p50_latency, p99_latency, p999_Latency, kb_per_sec
-        return
-
-    def save(self):
-        return [self.ops_per_sec,
-                self.hits_per_sec, self.misses_per_sec, self.avg_latency,
-                self.p50_latency, self.p99_latency, self.p999_Latency, self.kb_per_sec]
+@dataclass
+class Result:
+    ops_per_sec: float = 0
+    hits_per_sec: float = 0
+    misses_per_sec: float = 0
+    latency: float = 0
+    avg_latency: float = 0
+    min_latency: float = 0
+    max_latency: float = 0
+    p50_latency: float = 0
+    p99_latency: float = 0
+    p999_Latency: float = 0
 
 
-def execute(cpu_list='0',
-            page_size='4k',
-            num_iter=1,
-            benchmark="",
-            cmd=""):
-    cmd = 'taskset -c ' + str(cpu_list) + ' ' + cmd
-    process = subprocess.run(cmd.split(' '), check=True, stdout=subprocess.PIPE, universal_newlines=True)
-    output = process.stdout
-    return output
+p = Config()
+
+result_dir = "./memcached_result"
 
 
-def to_string(cpu_list='0-7',
-              page_size='4k',
-              num_iter=1,
-              benchmark=""):
-    return "{}_{}_{}_{}".format(cpu_list, page_size, num_iter, benchmark)
+def get_filename():
+    return os.path.join(result_dir, p.to_string())
 
 
-def save_meminfo(cpu_list='0',
-                 page_size='4k',
-                 num_iter=1,
-                 benchmark=""):
-    save_path = os.path.join(result_dir, to_string(cpu_list, page_size, num_iter, benchmark))
+def execute(path='memcached_result_', iter=1):
+    taskset_cmd = 'taskset -c ' + p.cpu_list + ' ./memtier_benchmark' + ' --threads ' + str(
+        p.num_thread) + ' -n ' + str(
+        p.num_req) + '--test-time=20 -P memcache_binary'
+    save_path = os.path.join(result_dir, path + p.to_string() + "_" + '#' + str(iter)) + ".json"
+    os.system(taskset_cmd + ' ---json-out-file=' + save_path)
+
+
+def save_meminfo():
+    save_path = get_filename() + "_meminfo"
     os.system("cp /proc/meminfo " + save_path)
     print("Saving /proc/meminfo to {}".format(save_path))
+
+
+def get_result():
+    results = {}
+    for summary_file in sorted(glob.glob(result_dir + "/*.json")):
+        with open(summary_file) as summary:
+            data = json.load(summary)
+            res = Result()
+
+            total = data['ALL STATS']['Totals']
+            res.ops_per_sec = float(str(total['Ops/sec']))
+            res.hits_per_sec = float(str(total['Hits/sec']))
+            res.misses_per_sec = float(str(total['Misses/sec']))
+            res.latency = float(str(total['Latency']))
+            res.avg_latency = float(str(total['Average Latency']))
+            res.min_latency = float(str(total['Min Latency']))
+            res.max_latency = float(str(total['Max Latency']))
+            percentile_latencies = total['Percentile Latencies']
+            res.p50_latency = percentile_latencies['p50.00']
+            res.p99_latency = percentile_latencies['p99.00']
+            res.p999_latency = percentile_latencies['p99.90']
+
+            results[os.path.basename(summary_file)] = res
+
+    print(results)
+    return results
+
+
+def get_rows(results: dict, key):
+    result = results[key]
+    return [key, result.throughput, result.avg_latency, result.min_latency,
+            result.p50_latency, result.p90_latency, result.p95_latency, result.max_latency]
+
+
+def save_result(results: dict):
+    res_file = get_filename() + ".csv"
+    for result in results.keys():
+        print(result)
+        if not os.path.exists(res_file):
+            with open(res_file, 'w+') as f:
+                writer = csv.writer(f)
+                writer.writerow(MEMCACHED_HEADERS)
+        with open(res_file, 'a') as f:
+            writer = csv.writer(f)
+            writer.writerow(get_rows(results, result))
+    return
 
 
 if __name__ == "__main__":
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n', type=int, required=True, help='# of iteration')
+    parser.add_argument('--iter', type=int, required=True, help='# of iteration')
     parser.add_argument('--c', type=str, required=False, help='cpu list')
     parser.add_argument('--p', type=str, required=False, help='page size')
+    parser.add_argument('-n', type=str, required=False, help='Total number of requests (default 100000)')
+    parser.add_argument('--threads', type=int, required=False, help='Enable multi-thread mode')
+    parser.add_argument('--mode', type=str, required=False, help='test mode (RD, WR, RDWR)')
     args = parser.parse_args()
 
     os.system("sudo service memcached start")
-    for i in range(args.n):
-        cmd = "./memtier_benchmark -p 11211 --threads=8 --test-time=20 --ratio=0:1 -P memcache_binary"
-        out = execute(cpu_list=args.c, page_size=args.p, num_iter=args.n, benchmark="memtier", cmd=cmd)
-        results = []
 
-        res = MemcachedResult("", "", "", "", "", "", "", "")
-        for o in out:
-            if "Totals" in o:
-                data = o.split()
-                res.ops_per_sec,\
-                res.hits_per_sec, res.misses_per_sec, res.avg_latency,\
-                res.p50_latency, res.p99_latency, res.p999_Latency, res.kb_per_sec = data[1:]
+    if not os.path.exists(result_dir):
+        os.mkdir(result_dir)
 
-        save_meminfo(cpu_list=args.c, page_size=args.p, num_iter=args.n, benchmark="redis")
+    for i in range(args.iter):
+        execute(iter=i)
 
-        res_file = to_string(args.c, args.p, args.n, "benchbase" + args.d)
-        if not os.path.exists("./result"):
-            os.mkdir("./result")
-
-        with open(os.path.join("./result", res_file), 'w+') as f:
-            writer = csv.writer(f)
-            writer.writerow(MEMCACHED_HEADERS)
-            for line in results:
-                writer.writerow(line.save())
+    results = get_result()
+    save_result(results)
