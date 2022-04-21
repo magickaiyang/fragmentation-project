@@ -52,33 +52,33 @@ class Result:
 
 p = Config()
 
-result_dir = "./result"
+result_dir = "./redis_result"
 
 
 def get_filename():
     return os.path.join(result_dir, p.to_string())
 
 
-def execute(mode, path='redis_result_'):
+def execute(mode, path='redis_result_', iter=1):
     taskset_cmd = 'taskset -c ' + p.cpu_list + ' redis-benchmark' + ' --threads ' + str(p.num_thread) + ' -n ' + str(
         p.num_req)
     if mode == WRONLY:
         for m in ['RPUSH', 'SPOP', 'RPOP']:
             new_cmd = taskset_cmd + ' -t ' + m
             print(new_cmd)
-            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m) + ".log"
+            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m + '#' + str(iter)) + ".log"
             os.system(new_cmd + ' > ' + save_path)
     elif mode == RDONLY:
         for m in ['GET', 'LRANGE']:
             new_cmd = taskset_cmd + ' -t ' + m
             print(new_cmd)
-            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m) + ".log"
+            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m + '#' + str(iter)) + ".log"
             os.system(new_cmd + ' > ' + save_path)
     elif mode == RDWR:
         for m in ['RPUSH', 'SPOP', 'RPOP', 'GET', 'LRANGE']:
             new_cmd = taskset_cmd + ' -t ' + m
             print(new_cmd)
-            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m) + ".log"
+            save_path = os.path.join(result_dir, path + p.to_string() + "_" + m + '#' + str(iter)) + ".log"
             os.system(new_cmd + ' > ' + save_path)
 
 
@@ -90,7 +90,7 @@ def save_meminfo():
 
 def get_result():
     results = {}
-    for summary_file in sorted(glob.glob("./result/*")):
+    for summary_file in sorted(glob.glob(result_dir + "/*.log")):
         with open(summary_file) as summary:
             irofile = iter(summary)
             res = Result()
@@ -115,9 +115,13 @@ def get_rows(results: dict, key):
 def save_result(results: dict):
     res_file = get_filename() + ".csv"
     for result in results.keys():
-        with open(res_file, 'w+') as f:
+        print(result)
+        if not os.path.exists(res_file):
+            with open(res_file, 'w+') as f:
+                writer = csv.writer(f)
+                writer.writerow(HEADER)
+        with open(res_file, 'a') as f:
             writer = csv.writer(f)
-            writer.writerow(HEADER)
             writer.writerow(get_rows(results, result))
     return
 
@@ -139,12 +143,12 @@ if __name__ == "__main__":
     # two most kernel-intensive read tests
     # responsible for returning the value of a key (GET) and returning a range of values for a key (LRANGE)
 
-    if not os.path.exists("./result"):
-        os.mkdir("./result")
+    if not os.path.exists(result_dir):
+        os.mkdir(result_dir)
 
+    save_meminfo()
     for i in range(args.iter):
-        execute(mode=WRONLY if args.mode == 'WR' else RDONLY if args.mode == 'RD' else RDWR)
-        save_meminfo()
+        execute(mode=WRONLY if args.mode == 'WR' else RDONLY if args.mode == 'RD' else RDWR, iter=i)
 
     results = get_result()
     save_result(results)
