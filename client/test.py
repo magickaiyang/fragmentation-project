@@ -9,7 +9,7 @@ from config import EXPORT_CONFIG_HEADERS, wrk_config, parse_test_config
 
 # adapted from https://github.com/MaartenSmeets/db_perftest/blob/master/test_scripts/wrk_parser.py
 
-wrkcmd = 'wrk'
+wrkcmd = '/home/magic/projects/fragmentation-project/client/wrk/wrk'
 
 EXPORT_WRK_HEADERS = [
     'lat_avg',
