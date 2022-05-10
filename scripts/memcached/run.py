@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 MEMCACHED_HEADERS = [
+    "config",
     "ops_per_sec",
     "hits_per_sec",
     "misses_per_sec",
@@ -30,9 +31,9 @@ class Config:
     cpu_list: str = '0-7'
     page_size: str = '4k'
     num_iter: int = 1
-    num_req: int = 10000
+    num_req: int = 100000
     num_thread: int = 1
-    benchmark: str = 'redis'
+    benchmark: str = 'memcached'
 
     def to_string(self):
         return "{}_{}_{}_{}_{}_{}" \
@@ -63,11 +64,12 @@ def get_filename():
 
 
 def execute(path='memcached_result_', iter=1):
-    taskset_cmd = 'taskset -c ' + p.cpu_list + ' ./memtier_benchmark' + ' --threads ' + str(
-        p.num_thread) + ' -n ' + str(
-        p.num_req) + '--test-time=20 -P memcache_binary'
+    taskset_cmd = 'taskset -c ' + p.cpu_list + ' /h/peili/fragmentation-project/memtier_benchmark/memtier_benchmark -p 11211' + ' --threads=' + str(
+        p.num_thread) + ' --requests=' + str(
+        p.num_req) + ' -P memcache_binary'
+    print(taskset_cmd)
     save_path = os.path.join(result_dir, path + p.to_string() + "_" + '#' + str(iter)) + ".json"
-    os.system(taskset_cmd + ' ---json-out-file=' + save_path)
+    os.system(taskset_cmd + ' --json-out-file=' + save_path)
 
 
 def save_meminfo():
@@ -76,77 +78,82 @@ def save_meminfo():
     print("Saving /proc/meminfo to {}".format(save_path))
 
 def print_avg(summary: list):
-    arr = np.array(summary)
+    float_summary = [float(x) for x in summary]
+    arr = np.array(float_summary)
     avg = np.average(arr)
     std = np.std(arr)
     print("average {}, standard deviation {}\n".format(avg, std))
 
-def get_result():
-    results = {}
+def get_single_result(res_json):
+    res = Result()
+    res.ops_per_sec = float(str(res_json['Ops/sec']))
+    res.hits_per_sec = float(str(res_json['Hits/sec']))
+    res.misses_per_sec = float(str(res_json['Misses/sec']))
+    res.latency = float(str(res_json['Latency']))
+    res.avg_latency = float(str(res_json['Average Latency']))
+    res.min_latency = float(str(res_json['Min Latency']))
+    res.max_latency = float(str(res_json['Max Latency']))
+    percentile_latencies = res_json['Percentile Latencies']
+    res.p50_latency = percentile_latencies['p50.00']
+    res.p99_latency = percentile_latencies['p99.00']
+    res.p999_latency = percentile_latencies['p99.90']
 
-    ops_per_sec_summary = []
-    hits_per_sec_summary = []
-    misses_per_sec_summary = []
-    latency_summary = []
-    avg_latency_summary = []
-    min_latency_summary = []
-    max_latency_summary = []
-    p50_latency_summary = []
-    p99_latency_summary = []
-    p999_latency_summary = []
+    return res
+
+
+def get_result():
+    sets_results = {}
+    gets_results = {}
+    total_results = {}
+
+    sets_avg_latency_summary = []
+    gets_avg_latency_summary = []
+    total_avg_latency_summary = []
 
     for summary_file in sorted(glob.glob(result_dir + "/*.json")):
         with open(summary_file) as summary:
             data = json.load(summary)
-            res = Result()
 
+            sets = data['ALL STATS']['Sets']
+            gets = data['ALL STATS']['Gets']
             total = data['ALL STATS']['Totals']
-            res.ops_per_sec = float(str(total['Ops/sec']))
-            res.hits_per_sec = float(str(total['Hits/sec']))
-            res.misses_per_sec = float(str(total['Misses/sec']))
-            res.latency = float(str(total['Latency']))
-            res.avg_latency = float(str(total['Average Latency']))
-            res.min_latency = float(str(total['Min Latency']))
-            res.max_latency = float(str(total['Max Latency']))
-            percentile_latencies = total['Percentile Latencies']
-            res.p50_latency = percentile_latencies['p50.00']
-            res.p99_latency = percentile_latencies['p99.00']
-            res.p999_latency = percentile_latencies['p99.90']
 
-            results[os.path.basename(summary_file)] = res
+            sets_result = get_single_result(sets)
+            sets_avg_latency_summary.append(sets_result.avg_latency)
 
-    print(results)
+            
+            gets_result = get_single_result(gets)
+            gets_avg_latency_summary.append(gets_result.avg_latency)
 
-    print("ops per sec: ")
-    print_avg(ops_per_sec_summary)
-    print("hits per sec: ")
-    print_avg(hits_per_sec_summary)
-     print("misses per sec: ")
-    print_avg(misses_per_sec_summary)
-    print("avg latency: ")
-    print_avg(avg_latency_summary)
-    print("min latency: ")
-    print_avg(min_latency_summary)
-    print("max latency: ")
-    print_avg(max_latency_summary)
-    print("p50 latency: ")
-    print_avg(p50_latency_summary)
-    print("p99 latency: ")
-    print_avg(p99_latency_summary)
-    print("p999 latency: ")
-    print_avg(p999_latency_summary)
-    
-    return results
+            total_result = get_single_result(total)
+            total_avg_latency_summary.append(total_result.avg_latency)
+
+            sets_results[os.path.basename(summary_file)] = sets_result
+            gets_results[os.path.basename(summary_file)] = gets_result
+            total_results[os.path.basename(summary_file)] = total_result
+
+    # print(sets_results)
+    # print(gets_results)
+    # print(total_results)
+
+    print("set: \n")
+    print_avg(sets_avg_latency_summary)
+    print("get: \n")
+    print_avg(gets_avg_latency_summary)
+    print("total: \n")
+    print_avg(total_avg_latency_summary)
+
+    return sets_results, gets_results, total_results
 
 
 def get_rows(results: dict, key):
-    result = results[key]
-    return [key, result.throughput, result.avg_latency, result.min_latency,
-            result.p50_latency, result.p90_latency, result.p95_latency, result.max_latency]
+    res = results[key]
+    return [key, res.ops_per_sec, res.hits_per_sec, res.misses_per_sec, res.latency, res.avg_latency, res.min_latency,
+            res.max_latency, res.p50_latency, res.p99_latency, res.p999_latency, ]
 
 
-def save_result(results: dict):
-    res_file = get_filename() + ".csv"
+def save_result(results: dict, method: str):
+    res_file = get_filename() + method + ".csv"
     for result in results.keys():
         print(result)
         if not os.path.exists(res_file):
@@ -170,13 +177,13 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, required=False, help='test mode (RD, WR, RDWR)')
     args = parser.parse_args()
 
-    os.system("sudo service memcached start")
-
     if not os.path.exists(result_dir):
         os.mkdir(result_dir)
 
     for i in range(args.iter):
         execute(iter=i)
 
-    results = get_result()
-    save_result(results)
+    sets_results, gets_results, total_results = get_result()
+    save_result(sets_results, "set")
+    save_result(gets_results, "get")
+    save_result(total_results, "total")

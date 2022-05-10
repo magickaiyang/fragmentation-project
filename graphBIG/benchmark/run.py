@@ -48,10 +48,10 @@ def get_filename():
     return os.path.join(result_dir, p.to_string())
 
 
-# def execute(iter=1):
-#     taskset_cmd = 'taskset -c ' + p.cpu_list
-#     os.system(taskset_cmd + " make run")
-#     os.system("mv output.log ./result/output{}.log".format(iter))
+def execute(iter=1):
+    taskset_cmd = 'taskset -c ' + p.cpu_list
+    os.system(taskset_cmd + " make run")
+    os.system("mv output.log ./result/output{}.log".format(iter))
 
 
 def save_meminfo():
@@ -134,6 +134,6 @@ if __name__ == "__main__":
         avg = np.average(arr)
         std = np.std(arr)
         print(key + ":")
-        print(avg, std)
+        print("avg: {}, std: {}". format(avg, std))
         print("\n")
     print(results)

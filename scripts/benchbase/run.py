@@ -98,7 +98,7 @@ class BenchbaseResult:
 
 if __name__ == "__main__":
     curr_path = os.getcwd()
-    os.chdir("../../benchbase/target/benchbase-2021-SNAPSHOT")
+    os.chdir("/h/peili/fragmentation-project/benchbase-mysql")
     # parse args
     parser = argparse.ArgumentParser()
     parser.add_argument('--n', type=int, required=True, help='# of iteration')
@@ -145,6 +145,9 @@ if __name__ == "__main__":
     result = []
 
     for summary_json_file in sorted(glob.glob("./results/*.summary.json")):
+        avg_latency_summary = []
+        throughput_summary = []
+
         with open(summary_json_file) as summary_json:
             data = json.load(summary_json)
 
@@ -170,7 +173,11 @@ if __name__ == "__main__":
             summary_latency.append((res.max_latency, res.median_latency, res.min_latency, res.avg_latency,
                                     res.latency_25, res.latency_75, res.latency_90, res.latency_95, res.latency_99))
             result.append(res)
+            avg_latency_summary.append(res.avg_latency)
+            throughput_summary.append(res.throughput_summary)
 
+    print_avg(avg_latency_summary)
+    print_avg(throughput_summary)
     os.chdir(curr_path)
     for res in result:
         res_file = to_string(args.c, args.p, args.n, "benchbase" + args.d)
@@ -183,9 +190,9 @@ if __name__ == "__main__":
             for line in result:
                 writer.writerow(line.save())
 
-    # for benchmark, throughput, goodput in output:
-    #     print(benchmark + ', throughput: ' + throughput + ", goodput: " + goodput, end='\n')
-    #
-    # for max_latency, median_latency, min_latency, avg_latency, latency_25, latency_75, latency_90, latency_95, latency_99 in summary_latency:
-    #     print(max_latency + ", " + median_latency + ", " + min_latency + ", " + avg_latency + ", " \
-    #           + latency_25 + ", " + latency_75 + ", " + latency_90 + ", " + latency_95 + ", " + latency_99)
+    for benchmark, throughput, goodput in output:
+        print(benchmark + ', throughput: ' + throughput + ", goodput: " + goodput, end='\n')
+
+    for max_latency, median_latency, min_latency, avg_latency, latency_25, latency_75, latency_90, latency_95, latency_99 in summary_latency:
+        print(max_latency + ", " + median_latency + ", " + min_latency + ", " + avg_latency + ", " \
+                  + latency_25 + ", " + latency_75 + ", " + latency_90 + ", " + latency_95 + ", " + latency_99)

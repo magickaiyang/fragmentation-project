@@ -61,7 +61,7 @@ def get_filename():
 
 
 def execute(mode, path='redis_result_', iter=1):
-    taskset_cmd = 'taskset -c ' + p.cpu_list + ' redis-benchmark' + ' --threads ' + str(p.num_thread) + ' -n ' + str(
+    taskset_cmd = 'taskset -c ' + p.cpu_list + ' /h/peili/fragmentation-project/redis-6.2.6/src/redis-benchmark' + ' --threads ' + str(p.num_thread) + ' -n ' + str(
         p.num_req)
     if mode == WRONLY:
         for m in ['RPUSH', 'SPOP', 'RPOP']:
@@ -89,13 +89,22 @@ def save_meminfo():
     print("Saving /proc/meminfo to {}".format(save_path))
 
 def print_avg(summary: list):
-    arr = np.array(summary)
+    float_summary = [float(x) for x in summary]
+    arr = np.array(float_summary)
     avg = np.average(arr)
     std = np.std(arr)
     print("average {}, standard deviation {}\n".format(avg, std))
 
 
-def get_result():
+def get_result_per_method():
+    get_result("GET")
+    get_result("LRANGE")
+    get_result("RPOP")
+    get_result("RPUSH")
+    get_result("SPOP")
+
+def get_result(method: str):
+    print("Running command {}".format(method))
     results = {}
 
     throughput_summary = []
@@ -106,7 +115,7 @@ def get_result():
     p95_latency_summary = []
     max_latency_summary = []
 
-    for summary_file in sorted(glob.glob(result_dir + "/*.log")):
+    for summary_file in sorted(glob.glob(result_dir + "/*{}*.log".format(method))):
         with open(summary_file) as summary:
             irofile = iter(summary)
             res = Result()
@@ -175,6 +184,9 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, required=False, help='test mode (RD, WR, RDWR)')
     args = parser.parse_args()
 
+    p.num_iter = args.iter
+    p.num_req = args.n
+
     # Redis Benchmark’s three most kernel-intensive write tests, responsible for inserting
     # (RPUSH) or deleting (SPOP, RPOP)
 
@@ -185,8 +197,8 @@ if __name__ == "__main__":
         os.mkdir(result_dir)
 
     save_meminfo()
-    for i in range(args.iter):
-        execute(mode=WRONLY if args.mode == 'WR' else RDONLY if args.mode == 'RD' else RDWR, iter=i)
+    # for i in range(args.iter):
+    #     execute(mode=WRONLY if args.mode == 'WR' else RDONLY if args.mode == 'RD' else RDWR, iter=i)
 
-    results = get_result()
-    save_result(results)
+    results = get_result_per_method()
+    # save_result(results)
