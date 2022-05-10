@@ -9,6 +9,7 @@ import glob
 import json
 import os
 from dataclasses import dataclass
+import numpy as np
 
 MEMCACHED_HEADERS = [
     "ops_per_sec",
@@ -74,9 +75,26 @@ def save_meminfo():
     os.system("cp /proc/meminfo " + save_path)
     print("Saving /proc/meminfo to {}".format(save_path))
 
+def print_avg(summary: list):
+    arr = np.array(summary)
+    avg = np.average(arr)
+    std = np.std(arr)
+    print("average {}, standard deviation {}\n".format(avg, std))
 
 def get_result():
     results = {}
+
+    ops_per_sec_summary = []
+    hits_per_sec_summary = []
+    misses_per_sec_summary = []
+    latency_summary = []
+    avg_latency_summary = []
+    min_latency_summary = []
+    max_latency_summary = []
+    p50_latency_summary = []
+    p99_latency_summary = []
+    p999_latency_summary = []
+
     for summary_file in sorted(glob.glob(result_dir + "/*.json")):
         with open(summary_file) as summary:
             data = json.load(summary)
@@ -98,6 +116,26 @@ def get_result():
             results[os.path.basename(summary_file)] = res
 
     print(results)
+
+    print("ops per sec: ")
+    print_avg(ops_per_sec_summary)
+    print("hits per sec: ")
+    print_avg(hits_per_sec_summary)
+     print("misses per sec: ")
+    print_avg(misses_per_sec_summary)
+    print("avg latency: ")
+    print_avg(avg_latency_summary)
+    print("min latency: ")
+    print_avg(min_latency_summary)
+    print("max latency: ")
+    print_avg(max_latency_summary)
+    print("p50 latency: ")
+    print_avg(p50_latency_summary)
+    print("p99 latency: ")
+    print_avg(p99_latency_summary)
+    print("p999 latency: ")
+    print_avg(p999_latency_summary)
+    
     return results
 
 

@@ -8,6 +8,7 @@ import csv
 import glob
 import os
 from dataclasses import dataclass
+import numpy as np
 
 RDONLY = 0
 WRONLY = 1
@@ -87,9 +88,24 @@ def save_meminfo():
     os.system("cp /proc/meminfo " + save_path)
     print("Saving /proc/meminfo to {}".format(save_path))
 
+def print_avg(summary: list):
+    arr = np.array(summary)
+    avg = np.average(arr)
+    std = np.std(arr)
+    print("average {}, standard deviation {}\n".format(avg, std))
+
 
 def get_result():
     results = {}
+
+    throughput_summary = []
+    avg_latency_summary = []
+    min_latency_summary = []
+    p50_latency_summary = []
+    p90_latency_summary = []
+    p95_latency_summary = []
+    max_latency_summary = []
+
     for summary_file in sorted(glob.glob(result_dir + "/*.log")):
         with open(summary_file) as summary:
             irofile = iter(summary)
@@ -97,12 +113,34 @@ def get_result():
             for line in irofile:
                 if "throughput summary" in line:
                     res.throughput = line.split(":")[1].strip().split(" ")[0]
+                    throughput_summary.append(res.throughput)
                 elif "avg       min       p50       p95       p99       max" in line:
                     line = next(irofile)
                     res.avg_latency, res.min_latency, res.p50_latency, \
                     res.p90_latency, res.p95_latency, res.max_latency = line.split()
                     results[os.path.basename(summary_file)] = res
+                    avg_latency_summary.append(res.avg_latency)
+                    min_latency_summary.append(res.min_latency)
+                    p50_latency_summary.append(res.p50_latency)
+                    p90_latency_summary.append(res.p90_latency)
+                    p95_latency_summary.append(res.p95_latency)
+                    max_latency_summary.append(res.max_latency)
     print(results)
+
+    print("throughput: ")
+    print_avg(throughput_summary)
+    print("avg latency: ")
+    print_avg(avg_latency_summary)
+    print("min latency: ")
+    print_avg(min_latency_summary)
+    print("p50 latency: ")
+    print_avg(p50_latency_summary)
+    print("p90 latency: ")
+    print_avg(p90_latency_summary)
+    print("p95 latency: ")
+    print_avg(p95_latency_summary)
+    print("max latency: ")
+    print_avg(max_latency_summary)
     return results
 
 
